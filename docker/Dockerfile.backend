@@ -1,0 +1,39 @@
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+# Install build dependencies
+COPY package*.json ./
+COPY shared/package*.json ./shared/
+COPY backend/package*.json ./backend/
+
+RUN npm install
+
+COPY shared/ ./shared/
+COPY backend/ ./backend/
+
+RUN npm --prefix shared run build
+RUN npm --prefix backend run build
+
+FROM node:20-alpine AS runner
+
+WORKDIR /app
+ENV NODE_ENV=production
+
+COPY package*.json ./
+COPY shared/package*.json ./shared/
+COPY backend/package*.json ./backend/
+
+RUN npm install --omit=dev
+
+COPY --from=builder /app/shared/dist ./shared/dist
+COPY --from=builder /app/backend/dist ./backend/dist
+COPY --from=builder /app/backend/prisma ./backend/prisma
+
+# Generate Prisma Client for the production environment
+WORKDIR /app/backend
+RUN npx prisma generate
+
+EXPOSE 5000
+
+CMD ["node", "dist/server.js"]

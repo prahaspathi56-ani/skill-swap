@@ -1,0 +1,9 @@
+# Append these to your .gitignore
+.env
+.env.*
+!_env.example
+!.env.example
+*.db
+*.db-journal
+node_modules/
+dist/

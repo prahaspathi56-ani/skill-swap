@@ -1,0 +1,30 @@
+# Render Blueprint: backend (Express + Socket.IO). Place at repo root.
+services:
+  - type: web
+    name: skillswap-api
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm --prefix shared run build && npx --prefix backend prisma generate && npm --prefix backend run build
+    startCommand: npm start
+    healthCheckPath: /api/health   # change if your backend uses a different health route
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 7d
+      - key: AI_PROVIDER
+        value: smart
+      - key: AI_API_KEY
+        sync: false
+      - key: AI_MODEL
+        value: gpt-4o-mini
+      - key: WEBRTC_STUN_SERVERS
+        value: stun:stun.l.google.com:19302,stun:stun1.l.google.com:19302
+      - key: DATABASE_URL        # paste your Neon connection string
+        sync: false
+      - key: FRONTEND_URL        # your Vercel URL, no trailing slash
+        sync: false
+      - key: BACKEND_URL         # your Render URL
+        sync: false

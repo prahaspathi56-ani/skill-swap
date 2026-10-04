@@ -1,0 +1,486 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id              String         @id @default(uuid())
+  email           String         @unique
+  passwordHash    String
+  name            String
+  role            String         @default("STUDENT") // STUDENT, MODERATOR, ADMIN
+  isVerified      Boolean        @default(false)
+  avatarUrl       String?
+  college         String?
+  department      String?
+  year            String?
+  bio             String?
+  githubUrl       String?
+  linkedinUrl     String?
+  portfolioUrl    String?
+  visibility      String         @default("PUBLIC") // PUBLIC, STUDENTS_ONLY, PRIVATE
+  availability    String?
+  languages       String         @default("English") // Comma separated
+  learningHours   Float          @default(0)
+  teachingHours   Float          @default(0)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  skills          UserSkill[]
+  learningGoals   LearningGoal[]
+  sentRequests    SkillSwapRequest[] @relation("SentRequests")
+  receivedRequests SkillSwapRequest[] @relation("ReceivedRequests")
+  hostedSessions  Session[]       @relation("HostedSessions")
+  joinedSessions  Session[]       @relation("JoinedSessions")
+  reviewsGiven    Review[]        @relation("ReviewsGiven")
+  reviewsReceived Review[]        @relation("ReviewsReceived")
+  questions       Question[]
+  answers         Answer[]
+  posts           CommunityPost[]
+  comments        PostComment[]
+  createdGroups   StudyGroup[]
+  groupMemberships GroupMember[]
+  achievements    UserAchievement[]
+  roadmaps        LearningRoadmap[]
+  submissions     CodingSubmission[]
+  notifications   Notification[]
+  messagesSent    Message[]
+  reports         Report[]        @relation("Reporter")
+  bookmarks       Bookmark[]
+  votes           Vote[]
+  likes           PostLike[]
+
+  @@index([email])
+  @@index([college])
+}
+
+model SkillCategory {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  slug        String   @unique
+  description String?
+  icon        String?
+  skills      Skill[]
+  questions   Question[]
+}
+
+model Skill {
+  id              String        @id @default(uuid())
+  name            String        @unique
+  categoryId      String
+  category        SkillCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  description     String?
+  isCustom        Boolean       @default(false)
+  createdByUserId String?
+  createdAt       DateTime      @default(now())
+
+  userSkills      UserSkill[]
+  offeredInRequests   SkillSwapRequest[] @relation("OfferedSkill")
+  requestedInRequests SkillSwapRequest[] @relation("RequestedSkill")
+  sessions        Session[]
+
+  @@index([name])
+  @@index([categoryId])
+}
+
+model UserSkill {
+  id                String   @id @default(uuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  skillId           String
+  skill             Skill    @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  type              String   // TEACH or LEARN
+  level             String   @default("INTERMEDIATE") // BEGINNER, INTERMEDIATE, ADVANCED
+  description       String?
+  yearsOfExperience Float?   @default(1.0)
+  createdAt         DateTime @default(now())
+
+  @@unique([userId, skillId, type])
+  @@index([userId])
+  @@index([skillId])
+  @@index([type])
+}
+
+model LearningGoal {
+  id          String    @id @default(uuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String
+  targetDate  String?
+  isCompleted Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+
+  @@index([userId])
+}
+
+model SkillSwapRequest {
+  id                  String   @id @default(uuid())
+  senderId            String
+  sender              User     @relation("SentRequests", fields: [senderId], references: [id], onDelete: Cascade)
+  receiverId          String
+  receiver            User     @relation("ReceivedRequests", fields: [receiverId], references: [id], onDelete: Cascade)
+  offeredSkillId      String
+  offeredSkill        Skill    @relation("OfferedSkill", fields: [offeredSkillId], references: [id])
+  requestedSkillId    String
+  requestedSkill      Skill    @relation("RequestedSkill", fields: [requestedSkillId], references: [id])
+  message             String
+  preferredTime       String
+  durationMinutes     Int      @default(60)
+  counterProposedTime String?
+  status              String   @default("PENDING") // PENDING, ACCEPTED, DECLINED, COUNTER_PROPOSED, CANCELLED
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([senderId])
+  @@index([receiverId])
+  @@index([status])
+}
+
+model SkillSwapConnection {
+  id        String   @id @default(uuid())
+  user1Id   String
+  user2Id   String
+  status    String   @default("ACTIVE")
+  createdAt DateTime @default(now())
+
+  @@unique([user1Id, user2Id])
+  @@index([user1Id])
+  @@index([user2Id])
+}
+
+model Conversation {
+  id        String    @id @default(uuid())
+  user1Id   String
+  user2Id   String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  messages  Message[]
+
+  @@unique([user1Id, user2Id])
+  @@index([user1Id])
+  @@index([user2Id])
+}
+
+model Message {
+  id             String       @id @default(uuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderId       String
+  sender         User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  content        String
+  attachmentUrl  String?
+  attachmentType String?
+  sessionId      String?
+  session        Session?     @relation(fields: [sessionId], references: [id])
+  isRead         Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+
+  @@index([conversationId])
+  @@index([senderId])
+}
+
+model Session {
+  id                 String    @id @default(uuid())
+  title              String
+  description        String?
+  skillId            String
+  skill              Skill     @relation(fields: [skillId], references: [id])
+  hostId             String
+  host               User      @relation("HostedSessions", fields: [hostId], references: [id], onDelete: Cascade)
+  participantId      String
+  participant        User      @relation("JoinedSessions", fields: [participantId], references: [id], onDelete: Cascade)
+  scheduledStartTime DateTime
+  durationMinutes    Int       @default(60)
+  status             String    @default("SCHEDULED") // SCHEDULED, STARTING_SOON, LIVE, COMPLETED, CANCELLED
+  meetingRoomId      String    @unique
+  agenda             String?
+  sessionNotes       String?
+  endedAt            DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  reviews            Review[]
+  messages           Message[]
+
+  @@index([hostId])
+  @@index([participantId])
+  @@index([status])
+  @@index([meetingRoomId])
+}
+
+model Review {
+  id              String   @id @default(uuid())
+  sessionId       String
+  session         Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  reviewerId      String
+  reviewer        User     @relation("ReviewsGiven", fields: [reviewerId], references: [id], onDelete: Cascade)
+  revieweeId      String
+  reviewee        User     @relation("ReviewsReceived", fields: [revieweeId], references: [id], onDelete: Cascade)
+  rating          Int      // 1 to 5
+  teachingClarity Int      // 1 to 5
+  sessionQuality  Int      // 1 to 5
+  comment         String
+  createdAt       DateTime @default(now())
+
+  @@unique([sessionId, reviewerId])
+  @@index([reviewerId])
+  @@index([revieweeId])
+}
+
+model Question {
+  id                 String        @id @default(uuid())
+  title              String
+  content            String
+  authorId           String
+  author             User          @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  categoryId         String
+  category           SkillCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  tags               String        @default("") // comma-separated
+  views              Int           @default(0)
+  voteCount          Int           @default(0)
+  answerCount        Int           @default(0)
+  aiAssistanceAnswer String?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  answers            Answer[]
+  votes              Vote[]
+  bookmarks          Bookmark[]
+
+  @@index([authorId])
+  @@index([categoryId])
+  @@index([createdAt])
+}
+
+model Answer {
+  id         String   @id @default(uuid())
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  authorId   String
+  author     User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  content    String
+  voteCount  Int      @default(0)
+  isAccepted Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  votes      Vote[]
+
+  @@index([questionId])
+  @@index([authorId])
+}
+
+model Vote {
+  id         String    @id @default(uuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  questionId String?
+  question   Question? @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  answerId   String?
+  answer     Answer?   @relation(fields: [answerId], references: [id], onDelete: Cascade)
+  value      Int       // 1 for upvote, -1 for downvote
+  createdAt  DateTime  @default(now())
+
+  @@unique([userId, questionId])
+  @@unique([userId, answerId])
+}
+
+model Bookmark {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+
+  @@unique([userId, questionId])
+  @@index([userId])
+}
+
+model CommunityPost {
+  id            String        @id @default(uuid())
+  authorId      String
+  author        User          @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  title         String
+  content       String
+  category      String        @default("General")
+  tags          String        @default("")
+  likesCount    Int           @default(0)
+  commentsCount Int           @default(0)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  comments      PostComment[]
+  likes         PostLike[]
+
+  @@index([authorId])
+  @@index([category])
+}
+
+model PostComment {
+  id        String        @id @default(uuid())
+  postId    String
+  post      CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User          @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  content   String
+  createdAt DateTime      @default(now())
+
+  @@index([postId])
+  @@index([authorId])
+}
+
+model PostLike {
+  id        String        @id @default(uuid())
+  postId    String
+  post      CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime      @default(now())
+
+  @@unique([postId, userId])
+}
+
+model StudyGroup {
+  id          String        @id @default(uuid())
+  name        String
+  description String
+  category    String
+  creatorId   String
+  creator     User          @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  memberCount Int           @default(1)
+  isPrivate   Boolean       @default(false)
+  topics      String        @default("")
+  createdAt   DateTime      @default(now())
+  members     GroupMember[]
+
+  @@index([creatorId])
+  @@index([category])
+}
+
+model GroupMember {
+  id       String     @id @default(uuid())
+  groupId  String
+  group    StudyGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role     String     @default("MEMBER") // ADMIN, MEMBER
+  joinedAt DateTime   @default(now())
+
+  @@unique([groupId, userId])
+}
+
+model Achievement {
+  id          String            @id @default(uuid())
+  code        String            @unique
+  title       String
+  description String
+  icon        String
+  category    String            @default("COMMUNITY")
+  users       UserAchievement[]
+}
+
+model UserAchievement {
+  id            String      @id @default(uuid())
+  userId        String
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  achievementId String
+  achievement   Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+  unlockedAt    DateTime    @default(now())
+
+  @@unique([userId, achievementId])
+  @@index([userId])
+}
+
+model LearningRoadmap {
+  id              String        @id @default(uuid())
+  userId          String
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title           String
+  targetRole      String
+  description     String
+  progressPercent Float         @default(0.0)
+  createdAt       DateTime      @default(now())
+  items           RoadmapItem[]
+
+  @@index([userId])
+}
+
+model RoadmapItem {
+  id                   String          @id @default(uuid())
+  roadmapId            String
+  roadmap              LearningRoadmap @relation(fields: [roadmapId], references: [id], onDelete: Cascade)
+  title                String
+  description          String
+  order                Int
+  isCompleted          Boolean         @default(false)
+  recommendedSkillName String?
+
+  @@index([roadmapId])
+}
+
+model CodingProblem {
+  id          String             @id @default(uuid())
+  title       String
+  slug        String             @unique
+  difficulty  String             @default("EASY") // EASY, MEDIUM, HARD
+  category    String
+  description String
+  starterCode String             // JSON encoded string
+  testCases   String             // JSON encoded string
+  hints       String             // JSON encoded string
+  submissions CodingSubmission[]
+
+  @@index([slug])
+  @@index([difficulty])
+}
+
+model CodingSubmission {
+  id              String        @id @default(uuid())
+  problemId       String
+  problem         CodingProblem @relation(fields: [problemId], references: [id], onDelete: Cascade)
+  userId          String
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  language        String
+  code            String
+  status          String        @default("ACCEPTED")
+  passedTests     Int
+  totalTests      Int
+  executionTimeMs Int
+  createdAt       DateTime      @default(now())
+
+  @@index([userId])
+  @@index([problemId])
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String
+  title     String
+  message   String
+  actionUrl String?
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([isRead])
+}
+
+model Report {
+  id         String   @id @default(uuid())
+  reporterId String
+  reporter   User     @relation("Reporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  targetType String   // USER, POST, QUESTION, SESSION
+  targetId   String
+  reason     String
+  status     String   @default("PENDING") // PENDING, RESOLVED, DISMISSED
+  createdAt  DateTime @default(now())
+
+  @@index([reporterId])
+  @@index([status])
+}
