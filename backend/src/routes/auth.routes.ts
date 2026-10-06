@@ -1,9 +1,8 @@
 import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 import { prisma } from '../db/prisma';
-import { config } from '../config';
+import { jwtService } from '../services/jwtService';
 import { authenticate, AuthenticatedRequest } from '../middleware/auth';
 import { validateBody } from '../middleware/validate';
 
@@ -126,11 +125,12 @@ router.post('/register', validateBody(registerSchema), async (req: Request, res:
       },
     });
 
-    const token = jwt.sign(
-      { userId: newUser.id, email: newUser.email, role: newUser.role, name: newUser.name },
-      config.jwtSecret,
-      { expiresIn: '7d' }
-    );
+    const token = jwtService.generateToken({
+      userId: newUser.id,
+      email: newUser.email,
+      role: newUser.role as any,
+      name: newUser.name,
+    });
 
     res.status(201).json({
       message: 'Registration successful',
@@ -175,11 +175,12 @@ router.post('/login', validateBody(loginSchema), async (req: Request, res: Respo
       return;
     }
 
-    const token = jwt.sign(
-      { userId: user.id, email: user.email, role: user.role, name: user.name },
-      config.jwtSecret,
-      { expiresIn: '7d' }
-    );
+    const token = jwtService.generateToken({
+      userId: user.id,
+      email: user.email,
+      role: user.role as any,
+      name: user.name,
+    });
 
     res.json({
       message: 'Login successful',
@@ -260,9 +261,39 @@ router.post('/reset-password', async (req: Request, res: Response): Promise<void
   res.json({ message: 'Password has been successfully updated.' });
 });
 
-// POST /api/auth/verify-email
-router.post('/verify-email', async (req: Request, res: Response): Promise<void> => {
-  res.json({ message: 'Email address verified successfully.' });
+// POST /api/auth/verify-token - Check if a JWT token is valid and return payload
+router.post('/verify-token', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { token } = req.body;
+    if (!token) {
+      res.status(400).json({ valid: false, error: 'Token is required.' });
+      return;
+    }
+    const decoded = jwtService.verifyToken(token);
+    res.json({ valid: true, payload: decoded });
+  } catch (error: any) {
+    res.status(401).json({ valid: false, error: 'Invalid or expired token.' });
+  }
+});
+
+// POST /api/auth/refresh - Refresh a valid JWT token
+router.post('/refresh', authenticate, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const user = req.user!;
+    const newToken = jwtService.generateToken({
+      userId: user.id,
+      email: user.email,
+      role: user.role,
+      name: user.name,
+    });
+    res.json({
+      message: 'Token refreshed successfully',
+      token: newToken,
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to refresh token.' });
+  }
 });
 
 export default router;
+

@@ -1,7 +1,7 @@
 import { Server as HttpServer } from 'http';
 import { Server, Socket } from 'socket.io';
-import jwt from 'jsonwebtoken';
 import { config } from '../config';
+import { jwtService } from './jwtService';
 
 interface SocketUser {
   userId: string;
@@ -27,7 +27,7 @@ export class SocketService {
       const token = socket.handshake.auth.token || socket.handshake.query.token;
       if (token && typeof token === 'string') {
         try {
-          const decoded = jwt.verify(token, config.jwtSecret) as { userId: string };
+          const decoded = jwtService.verifyToken(token);
           socket.data.userId = decoded.userId;
         } catch {
           // Token invalid, allow anonymous or reject depending on need

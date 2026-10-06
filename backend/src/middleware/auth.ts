@@ -1,7 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
-import jwt from 'jsonwebtoken';
-import { config } from '../config';
 import { prisma } from '../db/prisma';
+import { jwtService } from '../services/jwtService';
 
 export interface AuthUser {
   id: string;
@@ -27,12 +26,7 @@ export const authenticate = async (
     }
 
     const token = authHeader.split(' ')[1];
-    const decoded = jwt.verify(token, config.jwtSecret) as {
-      userId: string;
-      email: string;
-      role: 'STUDENT' | 'MODERATOR' | 'ADMIN';
-      name: string;
-    };
+    const decoded = jwtService.verifyToken(token);
 
     const user = await prisma.user.findUnique({
       where: { id: decoded.userId },
@@ -66,12 +60,7 @@ export const optionalAuth = async (
     const authHeader = req.headers.authorization;
     if (authHeader && authHeader.startsWith('Bearer ')) {
       const token = authHeader.split(' ')[1];
-      const decoded = jwt.verify(token, config.jwtSecret) as {
-        userId: string;
-        email: string;
-        role: 'STUDENT' | 'MODERATOR' | 'ADMIN';
-        name: string;
-      };
+      const decoded = jwtService.verifyToken(token);
 
       const user = await prisma.user.findUnique({
         where: { id: decoded.userId },
