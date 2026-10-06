@@ -21,4 +21,8 @@ export const config = {
       .split(',')
       .map((url) => ({ urls: url.trim() })),
   },
+  google: {
+    clientId: process.env.GOOGLE_CLIENT_ID || '',
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
+  },
 };

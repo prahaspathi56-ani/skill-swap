@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import { prisma } from '../db/prisma';
 import { jwtService } from '../services/jwtService';
+import { googleAuthService } from '../services/googleAuthService';
 import { authenticate, AuthenticatedRequest } from '../middleware/auth';
 import { validateBody } from '../middleware/validate';
 
@@ -164,8 +165,12 @@ router.post('/login', validateBody(loginSchema), async (req: Request, res: Respo
       where: { email: email.toLowerCase().trim() },
     });
 
-    if (!user) {
-      res.status(401).json({ error: 'Invalid email or password.' });
+    if (!user || !user.passwordHash) {
+      res.status(401).json({
+        error: !user
+          ? 'Invalid email or password.'
+          : 'This account was created using Google Sign-In. Please sign in with Google.',
+      });
       return;
     }
 
@@ -204,6 +209,107 @@ router.post('/login', validateBody(loginSchema), async (req: Request, res: Respo
     res.status(500).json({ error: 'Authentication failed.' });
   }
 });
+
+// POST /api/auth/google
+router.post('/google', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { credential, token: rawToken } = req.body;
+    const googleToken = credential || rawToken;
+
+    if (!googleToken) {
+      res.status(400).json({ error: 'Google authentication credential is required.' });
+      return;
+    }
+
+    const googleUser = await googleAuthService.verifyIdToken(googleToken);
+
+    // Look for existing student by Google ID or verified Email
+    let user = await prisma.user.findFirst({
+      where: {
+        OR: [
+          { googleId: googleUser.googleId },
+          { email: googleUser.email },
+        ],
+      },
+    });
+
+    let isNewUser = false;
+
+    if (!user) {
+      // First-time Google user: auto-register student profile
+      isNewUser = true;
+      user = await prisma.user.create({
+        data: {
+          email: googleUser.email,
+          name: googleUser.name,
+          googleId: googleUser.googleId,
+          avatarUrl: googleUser.avatarUrl,
+          isVerified: true,
+          college: 'University Student',
+          department: 'General Studies',
+          year: '1st Year',
+          bio: 'Excited to learn, teach, and exchange skills on SkillSwap!',
+          languages: 'English',
+          availability: 'Flexible / Evenings & Weekends',
+        },
+      });
+
+      // Send welcome notification
+      await prisma.notification.create({
+        data: {
+          userId: user.id,
+          type: 'ACHIEVEMENT_UNLOCKED',
+          title: 'Welcome via Google! 🚀',
+          message: 'Your Google-linked account is ready. Discover skills to learn and connect with peer mentors.',
+          actionUrl: '/explore',
+        },
+      });
+    } else {
+      // Existing user: Link googleId or update avatar if missing
+      const updateData: any = {};
+      if (!user.googleId) updateData.googleId = googleUser.googleId;
+      if (!user.avatarUrl && googleUser.avatarUrl) updateData.avatarUrl = googleUser.avatarUrl;
+      if (!user.isVerified) updateData.isVerified = true;
+
+      if (Object.keys(updateData).length > 0) {
+        user = await prisma.user.update({
+          where: { id: user.id },
+          data: updateData,
+        });
+      }
+    }
+
+    const token = jwtService.generateToken({
+      userId: user.id,
+      email: user.email,
+      role: user.role as any,
+      name: user.name,
+    });
+
+    res.json({
+      message: isNewUser ? 'Google registration successful' : 'Google login successful',
+      token,
+      isNewUser,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        college: user.college,
+        department: user.department,
+        year: user.year,
+        avatarUrl: user.avatarUrl,
+        bio: user.bio,
+        availability: user.availability,
+        languages: user.languages,
+      },
+    });
+  } catch (error: any) {
+    console.error('Google auth error:', error);
+    res.status(401).json({ error: error.message || 'Google authentication failed.' });
+  }
+});
+
 
 // GET /api/auth/me
 router.get('/me', authenticate, async (req: AuthenticatedRequest, res: Response): Promise<void> => {

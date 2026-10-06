@@ -11,6 +11,7 @@ import {
   Calendar,
   GraduationCap,
 } from 'lucide-react';
+import { GoogleSignInButton } from '../../components/common/GoogleSignInButton';
 
 export const RegisterPage: React.FC = () => {
   const { register } = useAuth();
@@ -149,6 +150,16 @@ export const RegisterPage: React.FC = () => {
           {/* STEP 1: Personal Info */}
           {step === 1 && (
             <div className="space-y-4">
+              {/* Google Fast Sign Up */}
+              <GoogleSignInButton text="signup_with" onError={(err) => setError(err)} />
+
+              <div className="relative flex items-center justify-center my-3">
+                <div className="border-t border-slate-200 w-full" />
+                <span className="bg-white px-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                  or register with college email
+                </span>
+              </div>
+
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">Full Name:</label>
                 <input

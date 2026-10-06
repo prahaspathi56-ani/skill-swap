@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { Repeat, Lock, Mail, ArrowRight, ShieldCheck, UserCheck } from 'lucide-react';
+import { GoogleSignInButton } from '../../components/common/GoogleSignInButton';
 
 export const LoginPage: React.FC = () => {
   const { login } = useAuth();
@@ -47,12 +48,22 @@ export const LoginPage: React.FC = () => {
       </div>
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md px-4">
-        <div className="bg-white py-8 px-6 sm:px-10 rounded-3xl border border-slate-200/90 shadow-xl space-y-6">
+        <div className="bg-white py-8 px-6 sm:px-10 rounded-3xl border border-slate-200/90 shadow-xl space-y-5">
           {error && (
             <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-xs text-rose-700 font-medium">
               {error}
             </div>
           )}
+
+          {/* Google Sign In */}
+          <GoogleSignInButton text="signin_with" onError={(err) => setError(err)} />
+
+          <div className="relative flex items-center justify-center my-3">
+            <div className="border-t border-slate-200 w-full" />
+            <span className="bg-white px-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+              or continue with email
+            </span>
+          </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
