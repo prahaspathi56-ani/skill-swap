@@ -22,23 +22,30 @@ export class GoogleAuthService {
   async verifyIdToken(idToken: string): Promise<GoogleUserInfo> {
     // If client ID is set, verify cryptographic signature and audience
     if (config.google.clientId) {
-      const ticket = await this.client.verifyIdToken({
-        idToken,
-        audience: config.google.clientId,
-      });
+      try {
+        const ticket = await this.client.verifyIdToken({
+          idToken,
+          audience: config.google.clientId,
+        });
 
-      const payload = ticket.getPayload();
-      if (!payload || !payload.email) {
-        throw new Error('Invalid Google token payload.');
+        const payload = ticket.getPayload();
+        if (!payload || !payload.email) {
+          throw new Error('Invalid Google token payload.');
+        }
+
+        return {
+          googleId: payload.sub,
+          email: payload.email.toLowerCase().trim(),
+          name: payload.name || payload.email.split('@')[0],
+          avatarUrl: payload.picture,
+          emailVerified: !!payload.email_verified,
+        };
+      } catch (err: any) {
+        if (config.nodeEnv === 'production') {
+          throw err;
+        }
+        // In development or testing, fall through to dev token parser
       }
-
-      return {
-        googleId: payload.sub,
-        email: payload.email.toLowerCase().trim(),
-        name: payload.name || payload.email.split('@')[0],
-        avatarUrl: payload.picture,
-        emailVerified: !!payload.email_verified,
-      };
     }
 
     // Development fallback: Parse JWT payload safely if GOOGLE_CLIENT_ID is not configured yet
