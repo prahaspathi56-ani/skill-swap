@@ -72,59 +72,93 @@ router.post('/register', validateBody(registerSchema), async (req: Request, res:
       },
     });
 
-    // Attach initial skills if provided
-    for (const skillName of skillsToTeach) {
-      const skill = await prisma.skill.findFirst({
-        where: { name: { equals: skillName } },
-      });
-      if (skill) {
-        await prisma.userSkill.create({
-          data: {
-            userId: newUser.id,
-            skillId: skill.id,
-            type: 'TEACH',
-            level: 'INTERMEDIATE',
-          },
+    // Safely attach initial skills
+    try {
+      for (const skillName of skillsToTeach) {
+        if (!skillName || typeof skillName !== 'string') continue;
+        let skill = await prisma.skill.findFirst({
+          where: { name: { equals: skillName.trim() } },
         });
+        if (!skill) {
+          const firstCat = await prisma.skillCategory.findFirst();
+          if (firstCat) {
+            skill = await prisma.skill.create({
+              data: {
+                name: skillName.trim(),
+                categoryId: firstCat.id,
+                description: `Student listed skill: ${skillName.trim()}`,
+                isCustom: true,
+                createdByUserId: newUser.id,
+              },
+            });
+          }
+        }
+        if (skill) {
+          await prisma.userSkill.create({
+            data: {
+              userId: newUser.id,
+              skillId: skill.id,
+              type: 'TEACH',
+              level: 'INTERMEDIATE',
+            },
+          }).catch(() => {});
+        }
       }
+
+      for (const skillName of skillsToLearn) {
+        if (!skillName || typeof skillName !== 'string') continue;
+        let skill = await prisma.skill.findFirst({
+          where: { name: { equals: skillName.trim() } },
+        });
+        if (!skill) {
+          const firstCat = await prisma.skillCategory.findFirst();
+          if (firstCat) {
+            skill = await prisma.skill.create({
+              data: {
+                name: skillName.trim(),
+                categoryId: firstCat.id,
+                description: `Student learning goal: ${skillName.trim()}`,
+                isCustom: true,
+                createdByUserId: newUser.id,
+              },
+            });
+          }
+        }
+        if (skill) {
+          await prisma.userSkill.create({
+            data: {
+              userId: newUser.id,
+              skillId: skill.id,
+              type: 'LEARN',
+              level: 'BEGINNER',
+            },
+          }).catch(() => {});
+        }
+      }
+    } catch (skillErr) {
+      console.warn('Initial skill assignment note:', skillErr);
     }
 
-    for (const skillName of skillsToLearn) {
-      const skill = await prisma.skill.findFirst({
-        where: { name: { equals: skillName } },
-      });
-      if (skill) {
-        await prisma.userSkill.create({
-          data: {
-            userId: newUser.id,
-            skillId: skill.id,
-            type: 'LEARN',
-            level: 'BEGINNER',
-          },
-        });
+    // Safely award initial achievement & send welcome notification
+    try {
+      if (skillsToTeach.length > 0) {
+        const ach = await prisma.achievement.findUnique({ where: { code: 'FIRST_SKILL_SHARED' } });
+        if (ach) {
+          await prisma.userAchievement.create({
+            data: { userId: newUser.id, achievementId: ach.id },
+          }).catch(() => {});
+        }
       }
-    }
-
-    // Award First Skill Shared achievement if they listed teaching skills
-    if (skillsToTeach.length > 0) {
-      const ach = await prisma.achievement.findUnique({ where: { code: 'FIRST_SKILL_SHARED' } });
-      if (ach) {
-        await prisma.userAchievement.create({
-          data: { userId: newUser.id, achievementId: ach.id },
-        });
-      }
-    }
-
-    // Create welcoming notification
-    await prisma.notification.create({
-      data: {
-        userId: newUser.id,
-        type: 'ACHIEVEMENT_UNLOCKED',
-        title: 'Welcome to SkillSwap! 🚀',
-        message: 'Your account is ready. Discover skills to learn and connect with peer mentors.',
-        actionUrl: '/explore',
-      },
-    });
+      await prisma.notification.create({
+        data: {
+          userId: newUser.id,
+          type: 'ACHIEVEMENT_UNLOCKED',
+          title: 'Welcome to SkillSwap! 🚀',
+          message: 'Your account is ready. Discover skills to learn and connect with peer mentors.',
+          actionUrl: '/explore',
+        },
+      }).catch(() => {});
+    } catch {}
 
     const token = jwtService.generateToken({
       userId: newUser.id,
@@ -152,7 +186,7 @@ router.post('/register', validateBody(registerSchema), async (req: Request, res:
     });
   } catch (error: any) {
     console.error('Registration error:', error);
-    res.status(500).json({ error: 'Failed to create student account.' });
+    res.status(500).json({ error: error.message || 'Failed to create student account.' });
   }
 });
 
@@ -224,12 +258,14 @@ router.post('/google', async (req: Request, res: Response): Promise<void> => {
     const googleUser = await googleAuthService.verifyIdToken(googleToken);
 
     // Look for existing student by Google ID or verified Email
+    const searchConditions: any[] = [{ email: googleUser.email.toLowerCase().trim() }];
+    if (googleUser.googleId) {
+      searchConditions.push({ googleId: googleUser.googleId });
+    }
+
     let user = await prisma.user.findFirst({
       where: {
-        OR: [
-          { googleId: googleUser.googleId },
-          { email: googleUser.email },
-        ],
+        OR: searchConditions,
       },
     });
 
@@ -240,10 +276,10 @@ router.post('/google', async (req: Request, res: Response): Promise<void> => {
       isNewUser = true;
       user = await prisma.user.create({
         data: {
-          email: googleUser.email,
+          email: googleUser.email.toLowerCase().trim(),
           name: googleUser.name,
-          googleId: googleUser.googleId,
-          avatarUrl: googleUser.avatarUrl,
+          googleId: googleUser.googleId || null,
+          avatarUrl: googleUser.avatarUrl || null,
           isVerified: true,
           college: 'University Student',
           department: 'General Studies',
@@ -254,20 +290,22 @@ router.post('/google', async (req: Request, res: Response): Promise<void> => {
         },
       });
 
-      // Send welcome notification
-      await prisma.notification.create({
-        data: {
-          userId: user.id,
-          type: 'ACHIEVEMENT_UNLOCKED',
-          title: 'Welcome via Google! 🚀',
-          message: 'Your Google-linked account is ready. Discover skills to learn and connect with peer mentors.',
-          actionUrl: '/explore',
-        },
-      });
+      // Safely send welcome notification
+      try {
+        await prisma.notification.create({
+          data: {
+            userId: user.id,
+            type: 'ACHIEVEMENT_UNLOCKED',
+            title: 'Welcome via Google! 🚀',
+            message: 'Your Google-linked account is ready. Discover skills to learn and connect with peer mentors.',
+            actionUrl: '/explore',
+          },
+        });
+      } catch {}
     } else {
       // Existing user: Link googleId or update avatar if missing
       const updateData: any = {};
-      if (!user.googleId) updateData.googleId = googleUser.googleId;
+      if (!user.googleId && googleUser.googleId) updateData.googleId = googleUser.googleId;
       if (!user.avatarUrl && googleUser.avatarUrl) updateData.avatarUrl = googleUser.avatarUrl;
       if (!user.isVerified) updateData.isVerified = true;
 

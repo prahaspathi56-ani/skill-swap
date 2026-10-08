@@ -114,7 +114,18 @@ export const GoogleSignInButton: React.FC<GoogleSignInButtonProps> = ({
   return (
     <div className="w-full">
       {clientId ? (
-        <div ref={buttonRef} className="w-full flex justify-center min-h-[44px]" />
+        <div className="space-y-1.5 w-full">
+          <div ref={buttonRef} className="w-full flex justify-center min-h-[44px]" />
+          <div className="text-center">
+            <button
+              type="button"
+              onClick={() => setDevModalOpen(true)}
+              className="text-[11px] text-slate-400 hover:text-brand-600 font-medium transition-colors"
+            >
+              Trouble with Google pop-up? Sign in with email directly →
+            </button>
+          </div>
+        </div>
       ) : (
         <button
           type="button"

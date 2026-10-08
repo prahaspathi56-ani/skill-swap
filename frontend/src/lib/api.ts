@@ -25,19 +25,30 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     headers.set('Authorization', `Bearer ${token}`);
   }
 
-  const response = await fetch(`${API_BASE}${endpoint}`, {
-    ...options,
-    headers,
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}${endpoint}`, {
+      ...options,
+      headers,
+    });
+  } catch (netErr: any) {
+    console.error('Network request failed:', netErr);
+    throw new ApiError(
+      netErr.message === 'Failed to fetch'
+        ? 'Cannot reach SkillSwap server. Please ensure the backend is running.'
+        : netErr.message || 'Network error occurred.',
+      503
+    );
+  }
 
   if (!response.ok) {
     let errorData: any;
     try {
       errorData = await response.json();
     } catch {
-      errorData = { error: response.statusText };
+      errorData = { error: response.statusText || 'Server error occurred' };
     }
-    throw new ApiError(errorData.error || 'An error occurred', response.status, errorData);
+    throw new ApiError(errorData.error || `Server error (${response.status})`, response.status, errorData);
   }
 
   if (response.status === 204) {

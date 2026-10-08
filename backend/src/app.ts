@@ -36,10 +36,10 @@ export const createApp = (): Application => {
 
   app.use(
     cors({
-      origin: [config.frontendUrl, 'http://localhost:5173', 'http://127.0.0.1:5173'],
+      origin: true,
       credentials: true,
       methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
     })
   );
 
